@@ -14,8 +14,10 @@ using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Components.Endpoints.FormMapping;
+using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Http.Json;
@@ -388,6 +390,7 @@ public static partial class RequestDelegateFactory
             {
                 // Add the Accepts metadata when reading from FORM.
                 InferFormAcceptsMetadata(factoryContext);
+                InferAntiforgeryMetadata(factoryContext);
             }
 
             PopulateBuiltInResponseTypeMetadata(methodInfo.ReturnType, factoryContext.EndpointBuilder);
@@ -1434,6 +1437,13 @@ public static partial class RequestDelegateFactory
                     return (null, false);
                 }
 
+                if (httpContext.Features.Get<IAntiforgeryValidationFeature>() is  { IsValid: false } antiforgeryValidationFeature)
+                {
+                    Log.InvalidAntiforgeryToken(httpContext, parameterTypeName, parameterName, antiforgeryValidationFeature.Exception!, throwOnBadRequest);
+                    httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
+                    return (null, false);
+                }
+
                 try
                 {
                     formValue = await httpContext.Request.ReadFormAsync();
@@ -1928,6 +1938,16 @@ public static partial class RequestDelegateFactory
         {
             AddInferredAcceptsMetadata(factoryContext, factoryContext.FirstFormRequestBodyParameter!.ParameterType, FormContentType);
         }
+    }
+
+    private static void InferAntiforgeryMetadata(RequestDelegateFactoryContext factoryContext)
+    {
+        if (factoryContext.MetadataAlreadyInferred)
+        {
+            return;
+        }
+
+        factoryContext.EndpointBuilder.Metadata.Add(new AntiforgeryMetadata(true));
     }
 
     private static Expression BindParameterFromFormCollection(
@@ -2546,6 +2566,20 @@ public static partial class RequestDelegateFactory
 
         [LoggerMessage(RequestDelegateCreationLogging.InvalidFormRequestBodyEventId, LogLevel.Debug, RequestDelegateCreationLogging.InvalidFormRequestBodyLogMessage, EventName = RequestDelegateCreationLogging.InvalidFormRequestBodyEventName)]
         private static partial void InvalidFormRequestBody(ILogger logger, string parameterType, string parameterName, Exception exception);
+
+        public static void InvalidAntiforgeryToken(HttpContext httpContext, string parameterTypeName, string parameterName, Exception exception, bool shouldThrow)
+        {
+            if (shouldThrow)
+            {
+                var message = string.Format(CultureInfo.InvariantCulture, RequestDelegateCreationLogging.InvalidAntiforgeryTokenExceptionMessage, parameterTypeName, parameterName);
+                throw new BadHttpRequestException(message, exception);
+            }
+
+            InvalidAntiforgeryToken(GetLogger(httpContext), parameterTypeName, parameterName, exception);
+        }
+
+        [LoggerMessage(RequestDelegateCreationLogging.InvalidAntiforgeryTokenEventId, LogLevel.Debug, RequestDelegateCreationLogging.InvalidAntiforgeryTokenLogMessage, EventName = RequestDelegateCreationLogging.InvalidAntiforgeryTokenEventName)]
+        private static partial void InvalidAntiforgeryToken(ILogger logger, string parameterType, string parameterName, Exception exception);
 
         private static ILogger GetLogger(HttpContext httpContext)
         {

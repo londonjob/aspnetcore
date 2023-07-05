@@ -7,7 +7,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Antiforgery;
-using Microsoft.AspNetCore.Antiforgery.Infrastructure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
@@ -106,21 +105,21 @@ internal class RazorComponentEndpointInvoker
         await writer.FlushAsync();
     }
 
-    private async Task<RequestValidationState> ValidateRequestAsync(IAntiforgery? antiforgery)
+    private Task<RequestValidationState> ValidateRequestAsync(IAntiforgery? antiforgery)
     {
         var isPost = HttpMethods.IsPost(_context.Request.Method);
         if (isPost)
         {
-            var valid = antiforgery == null || await antiforgery.IsRequestValidAsync(_context);
+            var valid = antiforgery == null || _context.Features.Get<IAntiforgeryValidationFeature>()?.IsValid == true;
             if (!valid)
             {
                 _context.Response.StatusCode = StatusCodes.Status400BadRequest;
             }
             var formValid = TrySetFormHandler(out var handler);
-            return new(valid && formValid, isPost, handler);
+            return Task.FromResult<RequestValidationState>(new(valid && formValid, isPost, handler));
         }
 
-        return new(true, false, null);
+        return Task.FromResult<RequestValidationState>(new(true, false, null));
     }
 
     private bool TrySetFormHandler([NotNullWhen(true)] out string? handler)

@@ -16,7 +16,7 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding;
 /// Represents the state of an attempt to bind values from an HTTP Request to an action method, which includes
 /// validation information.
 /// </summary>
-[DebuggerDisplay("Count = {Count}")]
+[DebuggerDisplay("Count = {Count}, IsValid = {IsValid}")]
 [DebuggerTypeProxy(typeof(ModelStateDictionaryDebugView))]
 public class ModelStateDictionary : IReadOnlyDictionary<string, ModelStateEntry?>
 {
